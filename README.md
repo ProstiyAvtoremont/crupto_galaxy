@@ -1,1 +1,0 @@
-# crupto_galaxy
