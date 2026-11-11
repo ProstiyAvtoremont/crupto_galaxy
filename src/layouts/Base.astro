@@ -1,0 +1,80 @@
+---
+import '../styles/global.css';
+import { SITE, TOOLS } from '../config';
+const { title = SITE.name, description = SITE.description } = Astro.props;
+const full = title === SITE.name ? `${SITE.name}: crypto calculators` : `${title} | ${SITE.name}`;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+const path = Astro.url.pathname;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{full}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#080716" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:title" content={full} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@500;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="stars" aria-hidden="true"></canvas>
+    <header class="border-b border-line/60">
+      <div class="wrap flex flex-wrap items-center justify-between gap-3 py-4">
+        <a href="/" class="flex items-center gap-2 font-display text-lg font-bold">
+          <svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><ellipse cx="32" cy="32" rx="28" ry="11" fill="none" stroke="#8b6cff" stroke-width="4" transform="rotate(-25 32 32)"/><circle cx="32" cy="32" r="10" fill="#4fe3ff"/></svg>
+          GalaxySpace
+        </a>
+        <nav class="flex flex-wrap gap-x-5 gap-y-1 text-sm" aria-label="Tools">
+          {TOOLS.map((t) => (
+            <a href={t.href} aria-current={path === t.href ? 'page' : undefined}
+               class:list={['hover:text-ion py-1', path === t.href ? 'text-ion' : 'text-mist']}>{t.short}</a>
+          ))}
+        </nav>
+      </div>
+    </header>
+
+    <main class="flex-1"><slot /></main>
+
+    <footer class="border-t border-line/60 mt-16">
+      <div class="wrap py-10">
+        <p class="note max-w-2xl">
+          Estimates only, not financial advice. Prices come from CoinGecko and DefiLlama and every calculation runs in your browser. Some links on this site are referral links.
+        </p>
+      </div>
+    </footer>
+
+    <script is:inline>
+      (function () {
+        var c = document.getElementById('stars'), x = c.getContext('2d'), s = [], w, h;
+        var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function size() {
+          w = c.width = innerWidth; h = c.height = innerHeight;
+          s = Array.from({ length: Math.min(160, Math.floor(w * h / 9000)) }, function () {
+            return { x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.3 + 0.2, v: Math.random() * 0.12 + 0.02,
+                     c: ['#ffffff', '#4fe3ff', '#8b6cff', '#ffb86b'][Math.floor(Math.random() * 4)] };
+          });
+        }
+        function draw() {
+          x.clearRect(0, 0, w, h);
+          s.forEach(function (p) {
+            x.globalAlpha = 0.35 + p.r / 2.2; x.fillStyle = p.c;
+            x.beginPath(); x.arc(p.x, p.y, p.r, 0, 6.283); x.fill();
+            if (!still) { p.y += p.v; if (p.y > h) { p.y = 0; p.x = Math.random() * w; } }
+          });
+          if (!still) requestAnimationFrame(draw);
+        }
+        addEventListener('resize', function () { size(); if (still) draw(); });
+        size(); draw();
+      })();
+    </script>
+  </body>
+</html>

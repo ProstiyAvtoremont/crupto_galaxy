@@ -1,0 +1,51 @@
+---
+import Base from '../layouts/Base.astro';
+import Orbit from '../components/Orbit.astro';
+import { SITE, TOOLS, AFFILIATES } from '../config';
+---
+<Base title={SITE.name}>
+  <section class="wrap pt-16 pb-10 sm:pt-24">
+    <h1 class="font-display text-4xl sm:text-6xl font-extrabold leading-[1.05] max-w-3xl">
+      {SITE.tagline}
+    </h1>
+    <p class="mt-5 max-w-xl text-lg text-mist">
+      Three free calculators for the newest corners of crypto. Live prices, no sign-up, nothing leaves your browser.
+    </p>
+
+    <div class="mt-8 flex flex-wrap gap-3" aria-live="polite">
+      <div class="stat min-w-40"><span>ETH</span><b id="p-eth">...</b></div>
+      <div class="stat min-w-40"><span>TON</span><b id="p-ton">...</b></div>
+      <a href="#tools" class="btn self-center">Pick a calculator</a>
+    </div>
+  </section>
+
+  <section id="tools" class="wrap grid gap-5 md:grid-cols-6">
+    {TOOLS.map((t, i) => (
+      <a href={t.href} class:list={['panel group block transition-colors hover:border-nebula focus:outline-none focus-visible:ring-2 focus-visible:ring-ion', i === 0 ? 'md:col-span-6 md:flex md:items-center md:gap-8' : 'md:col-span-3']}>
+        <Orbit color={t.color} tilt={t.tilt} size={i === 0 ? 96 : 56} />
+        <div class={i === 0 ? 'mt-4 md:mt-0' : 'mt-4'}>
+          <h2 class="font-display text-xl sm:text-2xl font-bold">{t.name}</h2>
+          <p class="mt-2 text-mist max-w-lg">{t.desc}</p>
+          <span class="mt-4 inline-block text-ion group-hover:underline">Open calculator</span>
+        </div>
+      </a>
+    ))}
+  </section>
+
+  <section class="wrap mt-12">
+    <div class="panel flex flex-wrap items-center justify-between gap-4">
+      <p class="max-w-lg">Need TON or ETH for the numbers you just ran?</p>
+      <div class="flex flex-wrap gap-3">
+        <a class="btn" href={AFFILIATES.ton.url} rel="sponsored noopener" target="_blank">{AFFILIATES.ton.label}</a>
+        <a class="btn-ghost" href={AFFILIATES.eth.url} rel="sponsored noopener" target="_blank">{AFFILIATES.eth.label}</a>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    import { $, getPrices, usd } from '../lib/api';
+    getPrices(['ethereum', 'the-open-network'])
+      .then((p) => { $('p-eth').textContent = usd(p['ethereum']); $('p-ton').textContent = usd(p['the-open-network']); })
+      .catch(() => { $('p-eth').textContent = 'n/a'; $('p-ton').textContent = 'n/a'; });
+  </script>
+</Base>

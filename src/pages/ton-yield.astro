@@ -1,0 +1,97 @@
+---
+import Base from '../layouts/Base.astro';
+import { AFFILIATES } from '../config';
+---
+<Base title="TON Liquidity Pool Calculator: Impermanent Loss" description="Calculate impermanent loss for TON liquidity pools on STON.fi and DeDust and see whether providing liquidity beats holding.">
+  <div class="wrap pt-12">
+    <h1 class="font-display text-3xl sm:text-4xl font-extrabold">TON pool: provide liquidity or just hold?</h1>
+    <p class="mt-3 text-mist max-w-2xl">Enter the token prices when you deposit and the prices you expect later. The calculator compares your pool position, including fees, with keeping the tokens in your wallet.</p>
+
+    <div class="mt-8 grid gap-6 lg:grid-cols-2">
+      <section class="panel space-y-4" aria-labelledby="in">
+        <h2 id="in" class="font-display text-xl font-bold">Your position</h2>
+        <div>
+          <label class="label" for="pool">Load a live TON pool (DefiLlama)</label>
+          <select id="pool" class="field"><option value="">Loading pools...</option></select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="label" for="dep">Deposit (USD)</label><input id="dep" class="field" type="number" min="0" value="1000" /></div>
+          <div><label class="label" for="days">Days in pool</label><input id="days" class="field" type="number" min="1" value="30" /></div>
+          <div><label class="label" for="a0">Token A price at deposit</label><input id="a0" class="field" type="number" step="any" min="0" value="3" /></div>
+          <div><label class="label" for="a1">Token A price later</label><input id="a1" class="field" type="number" step="any" min="0" value="3" /></div>
+          <div><label class="label" for="b0">Token B price at deposit</label><input id="b0" class="field" type="number" step="any" min="0" value="0.01" /></div>
+          <div><label class="label" for="b1">Token B price later</label><input id="b1" class="field" type="number" step="any" min="0" value="0.03" /></div>
+        </div>
+        <div>
+          <label class="label" for="apy">Pool fee APY (%)</label>
+          <input id="apy" class="field" type="number" step="any" min="0" value="40" />
+        </div>
+        <button id="fillTon" class="btn-ghost" type="button">Use live TON price for token A</button>
+        <p class="note">Assumes a 50/50 constant-product pool (the standard on STON.fi and DeDust) and that you deposit equal USD value of each token.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="out" aria-live="polite">
+        <h2 id="out" class="font-display text-xl font-bold mb-4">Result</h2>
+        <p id="verdict" class="font-display text-2xl font-bold mb-5">...</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="stat"><span>Value if you hold</span><b id="hold">-</b></div>
+          <div class="stat"><span>Pool value (no fees)</span><b id="lp">-</b></div>
+          <div class="stat"><span>Impermanent loss</span><b id="il">-</b></div>
+          <div class="stat"><span>Fees earned</span><b id="fees">-</b></div>
+          <div class="stat col-span-2"><span>Pool with fees vs hold</span><b id="net">-</b></div>
+        </div>
+        <a class="btn mt-6" href={AFFILIATES.ton.url} rel="sponsored noopener" target="_blank">{AFFILIATES.ton.label}</a>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    import { $, num, usd, pct, getPrices } from '../lib/api';
+
+    function calc() {
+      const D = num('dep'), days = num('days'), apy = num('apy') / 100;
+      const a0 = num('a0'), a1 = num('a1'), b0 = num('b0'), b1 = num('b1');
+      if (!(a0 > 0 && b0 > 0 && a1 > 0 && b1 > 0 && D > 0)) { $('verdict').textContent = 'Enter all prices above zero.'; return; }
+      const r = (b1 / a1) / (b0 / a0);                   // price ratio change
+      const factor = (2 * Math.sqrt(r)) / (1 + r);       // pool value / hold value
+      const hold = (D / 2) * (a1 / a0) + (D / 2) * (b1 / b0);
+      const lp = hold * factor;
+      const fees = D * apy * (days / 365);
+      const net = lp + fees - hold;
+      $('hold').textContent = usd(hold);
+      $('lp').textContent = usd(lp);
+      $('il').textContent = pct((factor - 1) * 100);
+      $('fees').textContent = usd(fees);
+      $('net').textContent = (net >= 0 ? '+' : '') + usd(net);
+      $('net').className = net >= 0 ? 'good' : 'bad';
+      $('verdict').textContent = net >= 0
+        ? `Pool wins by ${usd(net)}`
+        : `Holding wins by ${usd(-net)}`;
+      $('verdict').className = 'font-display text-2xl font-bold mb-5 ' + (net >= 0 ? 'good' : 'bad');
+    }
+    document.querySelectorAll('input').forEach((i) => i.addEventListener('input', calc));
+
+    $('fillTon').addEventListener('click', async () => {
+      try {
+        const p = (await getPrices(['the-open-network']))['the-open-network'];
+        ($('a0') as HTMLInputElement).value = String(p);
+        ($('a1') as HTMLInputElement).value = String(p);
+        calc();
+      } catch { alert('Could not reach CoinGecko. Enter the price manually.'); }
+    });
+
+    (async () => {
+      const sel = $<HTMLSelectElement>('pool');
+      try {
+        const r = await fetch('https://yields.llama.fi/pools');
+        const j = await r.json();
+        const pools = j.data.filter((p: any) => p.chain === 'Ton' && p.tvlUsd > 50000)
+          .sort((a: any, b: any) => b.tvlUsd - a.tvlUsd).slice(0, 15);
+        sel.innerHTML = '<option value="">Choose a pool to fill the fee APY</option>' +
+          pools.map((p: any) => `<option value="${p.apy ?? 0}">${p.symbol} on ${p.project} (APY ${(p.apy ?? 0).toFixed(1)}%)</option>`).join('');
+        sel.addEventListener('change', () => { if (sel.value) { ($('apy') as HTMLInputElement).value = Number(sel.value).toFixed(2); calc(); } });
+      } catch { sel.innerHTML = '<option value="">Live pools unavailable, enter APY manually</option>'; }
+    })();
+    calc();
+  </script>
+</Base>

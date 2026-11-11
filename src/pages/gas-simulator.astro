@@ -1,0 +1,101 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="L2 Gas Fee Simulator: Base, Optimism, Linea, Blast, Taiko" description="Live gas prices on low-cost Ethereum L2 networks. Calculate the cost of 100, 1,000 or 10,000 transactions and find the cheapest time of day.">
+  <div class="wrap pt-12">
+    <h1 class="font-display text-3xl sm:text-4xl font-extrabold">What will your transactions cost on each L2?</h1>
+    <p class="mt-3 text-mist max-w-2xl">Gas prices are read straight from each network's public RPC every 20 seconds. Pick a transaction type and a batch size to compare networks.</p>
+
+    <section class="panel mt-8 grid gap-4 sm:grid-cols-3" aria-label="Settings">
+      <div>
+        <label class="label" for="count">Number of transactions</label>
+        <select id="count" class="field"><option>100</option><option>1000</option><option>10000</option></select>
+      </div>
+      <div>
+        <label class="label" for="gas">Transaction type</label>
+        <select id="gas" class="field">
+          <option value="21000">ETH transfer (21,000 gas)</option>
+          <option value="65000">Token transfer (65,000 gas)</option>
+          <option value="150000">Swap (150,000 gas)</option>
+        </select>
+      </div>
+      <div>
+        <label class="label" for="ethp">ETH price (USD)</label>
+        <input id="ethp" class="field" type="number" step="any" min="0" value="3000" />
+      </div>
+    </section>
+
+    <section class="panel mt-6 overflow-x-auto" aria-live="polite">
+      <table class="w-full text-left text-sm min-w-[560px]">
+        <caption class="sr-only">Gas costs by network</caption>
+        <thead class="text-mist"><tr>
+          <th class="py-2 pr-3 font-medium">Network</th><th class="pr-3 font-medium">Gas price</th>
+          <th class="pr-3 font-medium">Per transaction</th><th class="pr-3 font-medium" id="totalH">Total</th>
+          <th class="font-medium">Cheapest hour (UTC)</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="status" class="note mt-4">Loading...</p>
+    </section>
+    <p class="note mt-4 max-w-2xl">Costs cover the L2 execution fee. Networks that post data to Ethereum also add an L1 data fee, so real totals can be somewhat higher. The cheapest hour is learned from readings taken on your device while this page is open, so it gets more accurate with each visit.</p>
+  </div>
+
+  <script>
+    import { $, num, usd, getPrices } from '../lib/api';
+    const NETS = [
+      { name: 'Base', rpc: 'https://mainnet.base.org' },
+      { name: 'Optimism', rpc: 'https://mainnet.optimism.io' },
+      { name: 'Linea', rpc: 'https://rpc.linea.build' },
+      { name: 'Blast', rpc: 'https://rpc.blast.io' },
+      { name: 'Taiko', rpc: 'https://rpc.mainnet.taiko.xyz' },
+    ];
+    const gwei: Record<string, number | null> = {};
+    const KEY = 'gs-gas-hours';
+    let hist: Record<string, Record<string, [number, number]>> = {};
+    try { hist = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
+
+    const cost = (g: number) => (g * 1e-9) * num('gas') * num('ethp'); // USD per tx
+    const total = () => parseInt(($('count') as HTMLSelectElement).value, 10);
+
+    function best(name: string) {
+      const h = hist[name]; if (!h) return 'collecting data';
+      let bh = '', bv = Infinity;
+      for (const k in h) { const avg = h[k][0] / h[k][1]; if (avg < bv) { bv = avg; bh = k; } }
+      return bh ? `${bh.padStart(2, '0')}:00` : 'collecting data';
+    }
+
+    function render() {
+      $('totalH').textContent = `Total for ${total().toLocaleString('en-US')}`;
+      $('rows').innerHTML = NETS.map((n) => {
+        const g = gwei[n.name];
+        if (g == null) return `<tr class="border-t border-line"><td class="py-3 pr-3 font-semibold">${n.name}</td><td colspan="4" class="text-mist">Unavailable right now</td></tr>`;
+        const c = cost(g);
+        return `<tr class="border-t border-line"><td class="py-3 pr-3 font-semibold">${n.name}</td>
+          <td class="pr-3">${g < 0.01 ? g.toFixed(5) : g.toFixed(3)} gwei</td><td class="pr-3">${usd(c)}</td>
+          <td class="pr-3 font-semibold text-ion">${usd(c * total())}</td><td>${best(n.name)}</td></tr>`;
+      }).join('');
+    }
+
+    async function poll() {
+      $('status').textContent = 'Updating...';
+      try { const p = (await getPrices(['ethereum']))['ethereum']; if (p) ($('ethp') as HTMLInputElement).value = String(Math.round(p)); } catch {}
+      const hour = String(new Date().getUTCHours());
+      await Promise.all(NETS.map(async (n) => {
+        try {
+          const r = await fetch(n.rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_gasPrice', params: [] }) });
+          const j = await r.json();
+          const g = parseInt(j.result, 16) / 1e9;
+          gwei[n.name] = g;
+          const slot = ((hist[n.name] ||= {})[hour] ||= [0, 0]);
+          slot[0] += cost(g); slot[1] += 1;
+        } catch { gwei[n.name] = null; }
+      }));
+      try { localStorage.setItem(KEY, JSON.stringify(hist)); } catch {}
+      render();
+      $('status').textContent = 'Updated ' + new Date().toLocaleTimeString() + '. Refreshes every 20 seconds.';
+    }
+    ['count', 'gas', 'ethp'].forEach((id) => $(id).addEventListener('input', render));
+    render(); poll(); setInterval(poll, 20000);
+  </script>
+</Base>
